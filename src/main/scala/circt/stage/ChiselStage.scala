@@ -45,7 +45,11 @@ class ChiselStage extends Stage {
 
     val pm = new PhaseManager(
       targets = Seq(
-        Dependency[chisel3.stage.ChiselStage],
+      //  Dependency[chisel3.stage.ChiselStage],
+        Dependency[chisel3.stage.phases.Checks],
+        Dependency[chisel3.stage.phases.Elaborate],
+        Dependency[RemoveExt],
+        Dependency[chisel3.stage.phases.Convert],
         Dependency[firrtl.stage.phases.AddImplicitOutputFile],
         Dependency[circt.stage.phases.AddDefaults],
         Dependency[circt.stage.phases.Checks],
@@ -62,6 +66,25 @@ class ChiselStage extends Stage {
 
 }
 
+import firrtl.AnnotationSeq
+import firrtl.options.Phase
+import chisel3.stage.ChiselCircuitAnnotation
+import chisel3.internal.firrtl.DefBlackBox
+class RemoveExt extends Phase {
+  override def prerequisites = Seq.empty
+  override def optionalPrerequisites = Seq.empty
+  override def optionalPrerequisiteOf = Seq.empty
+  override def invalidates(a: Phase) = false
+  def transform(annotations: AnnotationSeq): AnnotationSeq = annotations.flatMap {
+    case ChiselCircuitAnnotation(gen) =>
+      val rmbb = gen.components.filter(_.isInstanceOf[DefBlackBox]).map(_.asInstanceOf[DefBlackBox]).filter(a => !(a.name.contains("TilePRCIDomain")))
+      //println(gen.components.filter(_.isInstanceOf[DefBlackBox]).map(_.asInstanceOf[DefBlackBox]).map(_.name))
+      val nonrmbb = gen.components.filter(!_.isInstanceOf[DefBlackBox])
+      Seq(ChiselCircuitAnnotation(gen.copy(components = rmbb ++ nonrmbb)))
+    case a => Seq(a)
+  }
+}
+
 /** Utilities for compiling Chisel */
 object ChiselStage {
 
@@ -73,6 +96,7 @@ object ChiselStage {
     Seq(
       Dependency[chisel3.stage.phases.Checks],
       Dependency[chisel3.stage.phases.Elaborate],
+      Dependency[RemoveExt],
       Dependency[chisel3.stage.phases.Convert],
       Dependency[firrtl.stage.phases.AddImplicitOutputFile],
       Dependency[chisel3.stage.phases.AddImplicitOutputAnnotationFile],
